@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>心理年龄测试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6b7280',
+                        secondary: '#9ca3af',
+                        light: '#f9fafb',
+                        dark: '#1f2937'
+                    },
+                    fontFamily: {
+                        sans: ['system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .card-shadow {
+                box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+            }
+            .option-item {
+                transition: all 0.25s ease;
+            }
+            .option-item:hover {
+                transform: translateY(-2px);
+            }
+            .fade-in {
+                animation: fadeIn 0.4s ease forwards;
+            }
+            @keyframes fadeIn {
+                from {opacity:0;transform: translateY(10px);}
+                to {opacity:1;transform: translateY(0);}
+            }
+        }
+    </style>
+</head>
+<body class="bg-light text-dark min-h-screen">
+    <div class="max-w-2xl mx-auto px-4 py-8">
+        <!-- 首页 -->
+        <div id="start-page" class="fade-in">
+            <div class="bg-white rounded-2xl p-6 md:p-10 card-shadow">
+                <h1 class="text-[clamp(1.8rem,5vw,2.5rem)] font-medium text-center text-dark mb-4">心理年龄测试</h1>
+                <p class="text-secondary text-center mb-8">本测试共40题，请凭第一直觉选择最贴合你的答案，结果仅供趣味参考</p>
+                <div class="mb-6">
+                    <label class="block mb-2 text-sm">你的实际年龄</label>
+                    <input type="number" id="realAge" min="10" max="80" value="25" class="w-full border border-gray-200 rounded-lg px-4 py-3 outline-none focus:border-primary transition">
+                </div>
+                <button onclick="startTest()" class="w-full bg-dark text-white py-3 rounded-lg hover:bg-gray-700 transition">开始测试</button>
+            </div>
+        </div>
+
+        <!-- 答题页面 -->
+        <div id="test-page" class="hidden fade-in">
+            <div class="bg-white rounded-2xl p-6 md:p-10 card-shadow">
+                <div class="flex justify-between items-center mb-6">
+                    <span class="text-secondary">题目 <span id="current-num">1</span>/40</span>
+                    <div class="w-36 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div id="progress-bar" class="h-full bg-primary transition-all duration-300" style="width:2.5%"></div>
+                    </div>
+                </div>
+                <h2 id="question-title" class="text-lg font-medium mb-6"></h2>
+                <div id="option-box" class="space-y-3"></div>
+                <button onclick="nextQuestion()" id="next-btn" class="w-full mt-8 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition">下一题</button>
+            </div>
+        </div>
+
+        <!-- 结果页面 -->
+        <div id="result-page" class="hidden fade-in">
+            <div class="bg-white rounded-2xl p-6 md:p-10 card-shadow">
+                <h2 class="text-xl font-medium text-center mb-6">你的测试结果</h2>
+                <div class="text-center mb-6">
+                    <p class="text-secondary">实际年龄：<span id="res-real"></span> 岁</p>
+                    <p class="text-[clamp(2rem,8vw,3rem)] font-light my-2">心理年龄：<span id="res-mental" class="text-dark font-medium"></span> 岁</p>
+                    <p id="diff-text" class="text-secondary"></p>
+                </div>
+                <div class="border-t border-gray-100 pt-6 mt-4">
+                    <h3 class="font-medium mb-3">心理解析</h3>
+                    <div id="analysis-text" class="text-secondary leading-relaxed"></div>
+                </div>
+                <button onclick="restart()" class="w-full mt-8 bg-dark text-white py-3 rounded-lg hover:bg-gray-700 transition">重新测试</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+const API_BASE = "http://127.0.0.1:3000";
+let requestToken = ""; // 保存拿到的防重token
+
+// 页面加载时，提前获取token
+window.onload = async function(){
+    try{
+        const res = await fetch(`${API_BASE}/api/get-token`);
+        const json = await res.json();
+        if(json.code === 0){
+            requestToken = json.data.request_token;
+        }else{
+            alert("Token获取失败，请刷新页面");
+        }
+    }catch(e){
+        alert("无法连接后端服务");
+    }
+}
+
+// 40道题目
+const questionList = [
+    {q:"遇到计划被打乱时，你的反应是？",o:["烦躁不安，容易生气","有点不快，但很快平复","灵活调整，顺其自然","觉得很有趣，期待变化"]},
+    {q:"面对陌生人社交，你通常？",o:["紧张害怕，尽量避开","被动等待别人搭话","适度主动，从容交谈","主动热情，享受认识新人"]},
+    {q:"做决定时，你更依赖？",o:["直觉感受，跟着心情走","别人的建议和经验","理性权衡利弊","大胆尝试，不怕出错"]},
+    {q:"回忆过去，你常常？",o:["怀念过去，感慨今不如昔","偶尔想起，淡淡回味","很少回头，专注当下","很少回忆，向往未来"]},
+    {q:"当别人否定你的想法，你会？",o:["难过委屈，想要辩解","有点失落，默默接受","冷静思考对方的道理","觉得是观点差异，无所谓"]},
+    {q:"空闲时间，你更喜欢？",o:["躺着发呆，什么都不想做","刷短视频轻松消遣","看书学习、自我提升","出门探索新鲜事物"]},
+    {q:"关于金钱，你的观念是？",o:["有钱就花，及时享乐","按需消费，偶尔冲动","理性储蓄，规划开支","努力赚钱，用于投资成长"]},
+    {q:"遇到困难，你第一反应？",o:["焦虑，希望有人帮我解决","先逃避一会，缓一缓","自己想办法解决","当成挑战，兴奋想攻克"]},
+    {q:"你是否经常担心未来？",o:["经常焦虑，胡思乱想","偶尔会担心","很少担心，做好当下","从不担心，相信自己"]},
+    {q:"对于新鲜事物（新软件、新潮流），你？",o:["抵触，不想学习","能不碰就不碰","感兴趣就去了解","主动追逐，乐于尝试"]},
+    {q:"和朋友产生矛盾，你会？",o:["冷战，等着对方让步","心里难过，但不会主动","主动沟通，理清问题","很快释怀，不放在心上"]},
+    {q:"你如何看待批评？",o:["很难接受，容易受伤","表面接受内心不服","理性分辨有用的建议","把批评当成成长信号"]},
+    {q:"作息方面，你？",o:["昼夜颠倒，随心所欲","经常熬夜，难以自控","尽量规律作息","自律稳定，坚持好习惯"]},
+    {q:"做一件长期目标的事，你？",o:["很难坚持，容易放弃","三分钟热度，断断续续","稳步推进，持续坚持","享受长期深耕的过程"]},
+    {q:"你容易被情绪左右行为吗？",o:["非常容易，情绪上头就失控","比较容易，事后后悔","可以控制情绪，冷静行事","情绪稳定，很少波动"]},
+    {q:"看待生活，你更多是？",o:["悲观，总看到不好的一面","容易丧，偶尔乐观","平常心，好坏都接纳","积极乐观，总能看见希望"]},
+    {q:"你喜欢被别人照顾吗？",o:["非常依赖，希望被照顾","希望有人关心陪伴","可以独立，偶尔需要陪伴","喜欢独立，也愿意照顾别人"]},
+    {q:"面对失败，你的感受？",o:["自我否定，很久走不出来","失落一段时间慢慢恢复","总结经验，重新出发","失败只是体验，不定义自己"]},
+    {q:"在集体里，你倾向？",o:["跟着别人走，不想负责","配合大家，不做主角","愿意承担责任","主动主导安排事情"]},
+    {q:"你对仪式感的看法？",o:["很看重，没有就失落","喜欢偶尔的仪式感","可有可无，不刻意追求","觉得简单自在最重要"]},
+    {q:"别人拜托你帮忙，你？",o:["不懂拒绝，勉强答应","不好意思拒绝，纠结","量力而行，学会拒绝","爽快答应或直接拒绝，不内耗"]},
+    {q:"你是否经常胡思乱想？",o:["几乎一直脑补内耗","闲下来就容易多想","有事才思考，不瞎想","内心清净，很少内耗"]},
+    {q:"关于改变自己，你？",o:["不想改变，害怕陌生","想改变但很难行动","主动调整不好的习惯","持续迭代，接纳自我重塑"]},
+    {q:"看到别人过得很好，你会？",o:["嫉妒，心里不平衡","羡慕，有点自卑","祝福别人，专注自己","当成参考，激励自己"]},
+    {q:"压力大的时候，你？",o:["压抑崩溃，无处释放","靠娱乐麻痹自己","运动倾诉，主动解压","把压力转化成动力"]},
+    {q:"你相信命运吗？",o:["一切都是命中注定","大部分事情身不由己","命运掌握在自己手里","相信努力，但接纳无常"]},
+    {q:"做事情，你更喜欢？",o:["随性来，没有计划","简单计划，容易变动","详细规划，按计划执行","灵活规划，随机应变"]},
+    {q:"你能坦然接受自己的缺点吗？",o:["很难接纳，讨厌自己","回避缺点，不愿面对","接纳缺点，慢慢改善","接纳全部，包括不完美"]},
+    {q:"很久没联系的朋友，你会？",o:["等对方来找我","偶尔刷到动态看看","有空主动问候","随缘，关系顺其自然"]},
+    {q:"对于规则，你的态度？",o:["讨厌约束，想突破规则","觉得规则很麻烦","遵守合理的规则","理解规则的意义，自觉遵守"]},
+    {q:"你喜欢幻想吗？",o:["经常沉浸幻想，脱离现实","偶尔做白日梦","幻想很少，注重现实","幻想是灵感，落地才重要"]},
+    {q:"当你独处的时候，你？",o:["孤单难受，必须找人陪伴","有点无聊，需要外界刺激","享受独处，内心平静","独处是充电，很喜欢"]},
+    {q:"你容易感到无聊吗？",o:["很容易无聊，需要不停找乐子","没事做就觉得空虚","自己可以找到乐趣","永远有想做的事，很少无聊"]},
+    {q:"你对未来的规划？",o:["没有任何规划，走一步看一步","有模糊想法，没有行动","有清晰目标，稳步执行","有方向，也允许计划变化"]},
+    {q:"你是否在意他人评价？",o:["非常在意，活在别人眼光里","比较在意，容易受影响","只参考靠谱人的意见","不在意别人的看法"]},
+    {q:"遇到不公平的事，你？",o:["愤怒，无力又委屈","心里不满，但不会行动","力所能及去争取公道","理解世界不完美，量力而行"]},
+    {q:"学习新技能，你？",o:["害怕困难，不想尝试","试一试，难了就放弃","愿意花时间慢慢学会","享受学习带来的成长"]},
+    {q:"你会经常自我反思吗？",o:["很少反思，觉得自己没问题","做错了才反思","定期复盘反思自己","时刻觉察，不断调整认知"]},
+    {q:"你如何看待离别？",o:["很难接受，长久悲伤","伤感很久，慢慢释怀","知道离别是常态，珍惜当下","感恩相遇，接纳聚散无常"]},
+    {q:"总体来说，你觉得自己？",o:["容易疲惫，对生活提不起兴趣","时而迷茫，时而有动力","心态稳定，有自己节奏","内心丰盈，热爱生活"]}
+];
+
+let current = 0;
+let userAnswer = [];
+let realAge = 0;
+
+function startTest(){
+    realAge = Number(document.getElementById('realAge').value);
+    if(!realAge || realAge<10 || realAge>80){
+        alert("请输入10-80之间的真实年龄");
+        return;
+    }
+    document.getElementById('start-page').classList.add('hidden');
+    document.getElementById('test-page').classList.remove('hidden');
+    renderQuestion();
+}
+
+function renderQuestion(){
+    const q = questionList[current];
+    document.getElementById('current-num').innerText = current+1;
+    document.getElementById('question-title').innerText = q.q;
+    const box = document.getElementById('option-box');
+    box.innerHTML = "";
+    q.o.forEach((opt,idx)=>{
+        const item = document.createElement('div');
+        item.className = "option-item border border-gray-200 rounded-lg px-4 py-3 cursor-pointer hover:border-primary";
+        if(userAnswer[current] === idx) item.classList.add('bg-gray-100','border-primary');
+        item.innerText = opt;
+        item.onclick = ()=>{
+            userAnswer[current] = idx;
+            renderQuestion();
+        }
+        box.appendChild(item);
+    })
+    const percent = ((current+1)/40)*100;
+    document.getElementById('progress-bar').style.width = percent + "%";
+    document.getElementById('next-btn').innerText = current === 39 ? "查看结果" : "下一题";
+}
+
+async function nextQuestion(){
+    if(userAnswer[current] === undefined){
+        alert("请选择一个答案");
+        return;
+    }
+    if(current < 39){
+        current++;
+        renderQuestion();
+    }else{
+        // 提交，带上token在header
+        try{
+            const res = await fetch(`${API_BASE}/api/submit-test`,{
+                method:"POST",
+                headers:{
+                    "Content-Type":"application/json",
+                    "X-Request-Token": requestToken
+                },
+                body: JSON.stringify({
+                    realAge,
+                    answers: userAnswer
+                })
+            });
+            const json = await res.json();
+            if(json.code !== 0){
+                alert(json.msg);
+                return;
+            }
+            // 渲染后端返回结果
+            const data = json.data;
+            document.getElementById('test-page').classList.add('hidden');
+            document.getElementById('result-page').classList.remove('hidden');
+            document.getElementById('res-real').innerText = data.realAge;
+            document.getElementById('res-mental').innerText = data.mentalAge;
+            document.getElementById('diff-text').innerText = data.diffText;
+            document.getElementById('analysis-text').innerText = data.analysis;
+        }catch(e){
+            alert("提交失败，网络异常");
+        }
+    }
+}
+
+async function restart(){
+    // 重新测试，重新获取新token
+    const res = await fetch(`${API_BASE}/api/get-token`);
+    const json = await res.json();
+    if(json.code === 0){
+        requestToken = json.data.request_token;
+    }
+    current = 0;
+    userAnswer = [];
+    document.getElementById('result-page').classList.add('hidden');
+    document.getElementById('start-page').classList.remove('hidden');
+}
+</script>
+</body>
+</html>
